@@ -1,0 +1,589 @@
+﻿// Nagłówki
+//#include "stdafx.h"
+
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "stb_image.h"
+
+#include <GL/glew.h>
+#include <SFML/Window.hpp>
+#include <iostream>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
+//#include <Mouse.hpp>
+using namespace std;
+using namespace sf;
+// Kody shaderów
+const GLchar* vertexSource = R"glsl(
+#version 150 core
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 proj;
+in vec3 position;
+in vec3 color;
+out vec3 Color;
+// ####################################################################
+// LAB_8
+in vec2 aTexCoord;	//do tesktur
+out vec2 TexCoord;	//do tesktur
+// ####################################################################
+void main(){
+Color = color;
+gl_Position = proj * view * model * vec4(position, 1.0);
+TexCoord=aTexCoord;
+}
+)glsl";
+
+const GLchar* fragmentSource = R"glsl(
+#version 150 core
+in vec3 Color;
+out vec4 outColor;
+// ####################################################################
+// LAB_8
+in vec2 TexCoord;	//do tesktur
+uniform sampler2D texture1;	//do tesktur
+// ####################################################################
+void main()
+{
+// outColor = vec4(Color, 1.0);
+outColor = texture(texture1, TexCoord);
+}
+)glsl";
+// ####################################################################
+// LAB_5
+glm::mat4 model;
+glm::mat4 proj;
+glm::mat4 view;
+// ####################################################################
+// ####################################################################
+// LAB_8
+glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+// ####################################################################
+// ###################################################################
+// LAB_7
+double rotation = 0;
+glm::vec3 cameraPosition = glm::vec3(0.0f, 0.0f, 3.0f);
+glm::vec3 cameraPositionUp = glm::vec3(0.0f, 1.0f, 0.0f);
+glm::vec3 cameraPositionFront = glm::vec3(0.0f, 0.0f, -1.0f);
+
+bool fMouse = true;
+int last_x, last_y;
+double yaw = -90;
+double pitch = 0;
+
+void ustawKamereKlawisze(GLint view, float time) {
+    float cameraSpeed = 0.000001f * time;
+
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up)) {
+        //std::cout << "Up" << std::endl;
+        cameraPosition += cameraSpeed * cameraPositionFront;
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down)) {
+        //std::cout << "Down" << std::endl;
+        cameraPosition -= cameraSpeed * cameraPositionFront;
+    }
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left)) {
+        //std::cout << "Left" << std::endl;
+        //	rotation -= cameraSpeed;
+        //	cameraPositionFront.x = sin(rotation);
+        //	cameraPositionFront.z = -cos(rotation);
+        cameraPosition -= glm::normalize(glm::cross(cameraPositionFront, cameraPositionUp)) * cameraSpeed;
+    }
+
+    if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right)) {
+        //  std::cout << "Right" << std::endl;
+        //	rotation += cameraSpeed;
+        //	cameraPositionFront.x = sin(rotation);
+        //	cameraPositionFront.z = -cos(rotation);
+        cameraPosition += glm::normalize(glm::cross(cameraPositionFront, cameraPositionUp)) * cameraSpeed;
+    }
+    glm::mat4 thisView;
+    //add position to camera front to always look at front of cube
+    thisView = glm::lookAt(cameraPosition, cameraPosition + cameraPositionFront, cameraPositionUp);
+    // sending to shader
+    glUniformMatrix4fv(view, 1, GL_FALSE, glm::value_ptr(thisView));
+}
+
+void ustawKamereMysz(GLint uniformView, float time, const sf::Window& window) {
+
+    sf::Vector2i localPos = sf::Mouse::getPosition(window);
+    sf::Vector2i position;
+    bool reloc = false;
+
+    if (localPos.x <= 0) {
+        position.x = window.getSize().x;
+        position.y = localPos.y;
+        reloc = true;
+    }
+    if (localPos.x >= window.getSize().x - 1) {
+        position.x = 0;
+        position.y = localPos.y;
+        reloc = true;
+    }
+    if (localPos.y <= 0) {
+        position.y = window.getSize().y;
+        position.x = localPos.x;
+        reloc = true;
+    }
+    if (localPos.y >= window.getSize().y - 1) {
+        position.y = 0;
+        position.x = localPos.x;
+        reloc = true;
+    }
+    if (reloc) {
+        sf::Mouse::setPosition(position, window);
+        fMouse = true;
+    }
+    localPos = sf::Mouse::getPosition(window);
+
+    if (fMouse) {
+        last_x = localPos.x;
+        last_y = localPos.y;
+        fMouse = false;
+    }
+
+    float offset_x = localPos.x - last_x;
+    float offset_y = localPos.y - last_y;
+    last_x = localPos.x;
+    last_y = localPos.y;
+
+    double sensit = 0.8f;
+    double cameraSpeed = 0.00002f * time;
+    offset_x *= sensit;
+    offset_y *= sensit;
+
+    yaw += offset_x * cameraSpeed;
+    pitch -= offset_y * cameraSpeed;
+    if (yaw > 89.0f) pitch = 89.0f;
+    if (pitch < -89.0f) pitch - -89.0f;
+
+    glm::vec3 front;
+
+    front.x = cos(glm::radians(yaw)) * cos(glm::radians(pitch));
+    front.y = sin(glm::radians(pitch));
+    front.z = sin(glm::radians(yaw)) * cos(glm::radians(pitch));
+
+    cameraPositionFront = glm::normalize(front);
+
+    glm::mat4 view;
+    view = glm::lookAt(cameraPosition, cameraPosition + cameraPositionFront, cameraPositionUp);
+    glUniformMatrix4fv(uniformView, 1, GL_FALSE, glm::value_ptr(view));
+}
+// ###################################################################
+
+int main() {
+    sf::ContextSettings settings;
+    settings.depthBits = 24;
+    settings.stencilBits = 8;
+    // Okno renderingu
+    sf::Window window(sf::VideoMode(800, 600, 32), "OpenGL", sf::Style::Titlebar | sf::Style::Close, settings);
+    // Inicjalizacja GLEW
+    glewExperimental = GL_TRUE;
+    glewInit();
+    // Utworzenie VAO (Vertex Array Object)
+    GLuint vao;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+    // ###################################################################
+    // LAB_4
+    //int punkty_ = 10;
+    //GLfloat* vertices = new GLfloat[punkty_ * 6];
+    ////###################################
+    //// Utworzenie VBO (Vertex Buffer Object)
+    //// i skopiowanie do niego danych wierzchołkowych
+    // ###################################################################
+    // LAB_7
+    // GLuint vbo;
+    // glGenBuffers(1, &vbo);
+    // ###################################################################
+    ///*GLfloat vertices[] = {
+    // 0.8f, -0.8f, 0.0f, 0.0f, 0.0f, 1.0f,
+    // 0.8f, 0.8f, 0.0f, 0.0f, 1.0f, 0.0f,
+    // -0.8f, 0.8f, 0.0f, 1.0f, 0.0f, 0.0f,
+    // -0.8f, -0.8f, 0.0f, 1.0f, 1.0f, 1.0f,
+    //};*/
+    //GLfloat vertices[] = {
+    // 0.0f, 0.0f,0.0f, 0.0f, 1.0f, 0.0f,
+    // 0.25f, 0.5f,0.0f, 0.0f, 1.0f, 1.0f,
+    // 0.5f, 0.5f,0.0f, 0.0f, 1.0f, 1.0f,
+    // 0.75f, 0.0f,0.0f, 1.0f, 0.0f, 1.0f,
+    // 0.5f, -0.5f,0.0f, 0.0f, 1.0f, 1.0f,
+    // 0.25f, -0.5f,0.0f, 0.0f, 0.0f, 1.0f
+    //};
+    //// TRIANGLE
+    ///*GLfloat vertices[] = {
+    //0.0f, 0.5f, 1.0f, 0.0f, 0.0f,
+    //0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+    //-0.5f, -0.5f, 0.0f, 0.0f, 1.0f
+    //};*/
+
+    // ####################################################################
+    // LAB_5
+    int punkty_ = 36;
+    /*float vertices[] = {
+            -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+            0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f,
+            0.5f, 0.5f, -0.5f, 1.0f, 1.0f, 0.0f,
+            0.5f, 0.5f, -0.5f, 1.0f, 1.0f, 0.0f,
+            -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+            -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
+            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
+            0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 1.0f, 0.0f,
+            -0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f,
+            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
+            -0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+            -0.5f, 0.5f, -0.5f, 1.0f, 1.0f, 0.0f,
+            -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+            -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
+            -0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+            0.5f, 0.5f, -0.5f, 1.0f, 1.0f, 0.0f,
+            0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+            0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+            0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+            -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+            0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 0.0f,
+            0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+            0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+            -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
+            -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+            -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f,
+            0.5f, 0.5f, -0.5f, 1.0f, 1.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+            0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f,
+            -0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 0.0f,
+            -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f
+    };*/
+    // ####################################################################
+    // LAB_8
+    float vertices[] = {
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+         0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,	//koniec 1 ściany
+
+        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, //koniec 2 ściany
+
+        -0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+        -0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, //koniec 3 ściany
+
+         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+         0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+         0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,
+         0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, //koniec 4 ściany
+
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+         0.5f, -0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+         0.5f, -0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+        -0.5f, -0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f, -0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, //koniec 5 ściany
+
+        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+         0.5f,  0.5f, -0.5f, 1.0f, 1.0f, 0.0f, 1.0f, 0.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+         0.5f,  0.5f,  0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,
+        -0.5f,  0.5f,  0.5f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f,
+        -0.5f,  0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f //koniec 6 ściany
+    };
+    // ####################################################################
+
+    float cameraSpeed = 0.001;
+    float obrot = 0.005f;
+
+    GLuint vbo;
+    glGenBuffers(6, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * punkty_ * 6, vertices,
+        GL_STATIC_DRAW);
+
+
+    // ####################################################################
+    // LAB_8
+    // obsługa tekstur
+    unsigned int texture1;
+    glGenTextures(1, &texture1);
+    glBindTexture(GL_TEXTURE_2D, texture1);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    int width, height, nrChannels;
+    stbi_set_flip_vertically_on_load(true); // tell stb_image.h to flip loaded texture's on the y-axis
+
+    unsigned char* data = stbi_load("wood.jpg", &width, &height, &nrChannels, 0);
+
+    glBindTexture(GL_TEXTURE_2D, texture1);
+
+    if (data)
+    {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+    }
+    else
+    {
+        std::cout << "Failed to load texture" << std::endl;
+    }
+    stbi_image_free(data);
+    // ####################################################################
+
+    // ####################################################################
+    // Utworzenie i skompilowanie shadera wierzchołków
+    GLuint vertexShader =
+        glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vertexShader, 1, &vertexSource, NULL);
+    glCompileShader(vertexShader);
+    // Utworzenie i skompilowanie shadera fragmentów
+    GLuint fragmentShader =
+        glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(fragmentShader, 1, &fragmentSource, NULL);
+    glCompileShader(fragmentShader);
+    // ####################################################################
+    // LAB_3
+    // CHECK IF SHADER IS OK
+    GLint isVertexCompiled = 0, isfragmentCompiled = 0, maxLength = 0;
+    glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &isVertexCompiled);
+    glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &isfragmentCompiled);
+    if (isfragmentCompiled != GL_FALSE) {
+        cout << "Compilation fragmentShader - OK\n";
+    }
+    else {
+        glGetShaderiv(fragmentShader, GL_INFO_LOG_LENGTH, &maxLength);
+        vector<GLchar> errorLogFragment(maxLength);
+        cout << "Compilation fragmentShader - ERROR\n";
+        glGetShaderInfoLog(fragmentShader, maxLength, &maxLength, &errorLogFragment[0]);
+    }
+    if (isVertexCompiled != GL_FALSE) {
+        cout << "Compilation and vertexShader - OK\n";
+    }
+    else {
+        glGetShaderiv(vertexShader, GL_INFO_LOG_LENGTH, &maxLength);
+        vector<GLchar> errorLogVertex(maxLength);
+        glGetShaderInfoLog(vertexShader, maxLength, &maxLength, &errorLogVertex[0]);
+        cout << "Compilation fragmentShader and vertexShader - ERROR\n";
+    }
+    // ####################################################################
+    // Zlinkowanie obu shaderów w jeden wspólny program
+    GLuint shaderProgram = glCreateProgram();
+    glAttachShader(shaderProgram, vertexShader);
+    glAttachShader(shaderProgram, fragmentShader);
+    glBindFragDataLocation(shaderProgram, 0, "outColor");
+    glLinkProgram(shaderProgram);
+    glUseProgram(shaderProgram);
+    // Specifikacja formatu danych wierzchołkowych
+    GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
+    glEnableVertexAttribArray(posAttrib);
+    glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), 0); // 5 - > 6 - > 8 i 2 - > 3
+    GLint colAttrib = glGetAttribLocation(shaderProgram, "color");
+    glEnableVertexAttribArray(colAttrib);
+    glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat))); // 5 - > 6 - > 8 
+    // ####################################################################
+    // LAB_8
+    GLint TexCoord = glGetAttribLocation(shaderProgram, "aTexCoord");	//do obsługi tekstur
+    glEnableVertexAttribArray(TexCoord);
+    glVertexAttribPointer(TexCoord, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(6 * sizeof(GLfloat)));
+    // ####################################################################
+    // ####################################################################
+    // LAB_4
+    bool running = true;
+    sf::Mouse myszka;
+    GLenum prymityw = GL_TRIANGLES;
+    // ####################################################################
+    // LAB_5
+    model = glm::mat4(1.0f);
+    model = glm::rotate(model, glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+    GLint uniTrans = glGetUniformLocation(shaderProgram, "model");
+    glUniformMatrix4fv(uniTrans, 1, GL_FALSE, glm::value_ptr(model));
+    view = glm::lookAt(glm::vec3(0.0f, 0.0f, 3.0f),
+        glm::vec3(0.0f, 0.0f, 0.0f),
+        glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 3.0f);
+    glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
+    glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
+    view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+    GLint uniView = glGetUniformLocation(shaderProgram, "view");
+    glUniformMatrix4fv(uniView, 1, GL_FALSE, glm::value_ptr(view));
+    proj = glm::perspective(glm::radians(45.0f), 800.0f / 800.0f, 0.06f, 100.0f);
+    GLint uniProj = glGetUniformLocation(shaderProgram, "proj");
+    glUniformMatrix4fv(uniProj, 1, GL_FALSE, glm::value_ptr(proj));
+    // ####################################################################
+    // ####################################################################
+    // LAB_7
+    window.setMouseCursorGrabbed(true); //przechwycenie kursora myszy w oknie ------------
+    window.setMouseCursorVisible(false); //ukrycie kursora myszy
+    sf::Time time;
+    sf::Clock clock;
+    // ####################################################################
+    while (running) {
+        // ####################################################################
+        // LAB_7
+        time = clock.getElapsedTime();
+        time = clock.restart();
+        // ####################################################################
+        sf::Event windowEvent;
+        while (window.pollEvent(windowEvent)) {
+            switch (windowEvent.type) {
+            case sf::Event::Closed:
+                running = false;
+                break;
+            }
+        }
+
+        sf::Event::KeyPressed;
+        switch (windowEvent.key.code) {
+        case sf::Keyboard::Escape:
+            running = false;
+            break;
+        case sf::Keyboard::Num1:
+            prymityw = GL_POINTS;
+            break;
+        case sf::Keyboard::Num2:
+            running = GL_LINES;
+            break;
+        case sf::Keyboard::Num3:
+            running = GL_LINE_STRIP;
+            break;
+        case sf::Keyboard::Num4:
+            running = GL_LINE_LOOP;
+            break;
+        case sf::Keyboard::Num5:
+            running = GL_TRIANGLES;
+            break;
+        case sf::Keyboard::Num6:
+            running = GL_TRIANGLE_STRIP;
+            break;
+        case sf::Keyboard::Num7:
+            running = GL_TRIANGLE_FAN;
+            break;
+        case sf::Keyboard::Num8:
+            running = GL_QUADS;
+            break;
+        case sf::Keyboard::Num9:
+            running = GL_QUAD_STRIP;
+            break;
+        case sf::Keyboard::Num0:
+            running = GL_POLYGON;
+            break;
+            // ####################################################################
+            // LAB_5
+            /*case sf::Keyboard::Right:
+                obrot -= cameraSpeed;
+                cameraFront.x = sin(obrot);
+                cameraFront.z = -cos(obrot);
+                view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+                glUniformMatrix4fv(uniView, 1, GL_FALSE, glm::value_ptr(view));
+                break;
+            case sf::Keyboard::Left:
+                obrot -= cameraSpeed;
+                cameraFront.x = sin(obrot);
+                cameraFront.z = -cos(obrot);
+                view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+                glUniformMatrix4fv(uniView, 1, GL_FALSE, glm::value_ptr(view));
+                break;
+            case sf::Keyboard::Up:
+                cameraPos += cameraSpeed * cameraFront;
+                view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+                glUniformMatrix4fv(uniView, 1, GL_FALSE, glm::value_ptr(view));
+                break;
+            case sf::Keyboard::Down:
+                cameraPos -= cameraSpeed * cameraFront;
+                view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+                glUniformMatrix4fv(uniView, 1, GL_FALSE, glm::value_ptr(view));
+                break;*/
+                // ####################################################################
+        }
+        sf::Vector2i mouse = myszka.getPosition(window);
+        sf::Event::MouseMoved;
+        switch (windowEvent.type)
+        {
+            // ####################################################################
+            // LAB_5
+            //case sf::Event::MouseMoved:
+            // //punkty_++;
+            // if (windowEvent.mouseMove.y < mouse.y) {
+            // punkty_++;
+            // //mouse_y = windowEvent.mouseMove.y;
+            // if (punkty_ > 10) {
+            // punkty_ = 10;
+            // }
+            // }
+            // else if (windowEvent.mouseMove.y > mouse.y) {
+            // punkty_--;
+            // //mouse_y = windowEvent.mouseMove.y;
+            // if (punkty_ < 0) {
+            // punkty_ = 0;
+            // }
+            // }
+            // ####################################################################
+            // LAB_7
+        case sf::Event::MouseMoved:
+            ustawKamereMysz(uniView, time.asMicroseconds(), window);
+            break;
+            // ####################################################################
+        }
+        // ####################################################################
+        // Rozpoczęcie pętli zdarzeń
+        /*bool running = true;
+        while (running) {
+        sf::Event windowEvent;
+        while (window.pollEvent(windowEvent)) {
+        switch (windowEvent.type) {
+        case sf::Event::Closed:
+        running = false;
+        break;
+        }
+        }*/
+        // Nadanie scenie koloru czarnego
+        // ####################################################################
+        // LAB_7
+        ustawKamereKlawisze(uniView, time.asMicroseconds());
+        // ####################################################################
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+        // Narysowanie trójkąta na podstawie 3 wierzchołków
+        /*glDrawArrays(GL_TRIANGLES, 0, 3);*/
+        // ####################################################################
+        // LAB_3
+        // DRAW POLYGON
+        //glDrawArrays(GL_POLYGON, 0, 4);
+        // ####################################################################
+        // ####################################################################
+        // LAB_4
+        glDrawArrays(prymityw, 0, punkty_);
+        // ####################################################################
+        // Wymiana buforów tylni/przedni
+        window.display();
+    }
+    // Kasowanie programu i czyszczenie buforów
+    glDeleteProgram(shaderProgram);
+    glDeleteShader(fragmentShader);
+    glDeleteShader(vertexShader);
+    glDeleteBuffers(1, &vbo);
+    glDeleteVertexArrays(1, &vao);
+    // Zamknięcie okna renderingu
+    window.close();
+    return 0;
+}
