@@ -1,4 +1,4 @@
-﻿// Nagłówki
+// Nagłówki
 //#include "stdafx.h"
 
 
@@ -13,7 +13,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #pragma warning(disable:4996)
-
 //#include <Mouse.hpp>
 using namespace std;
 using namespace sf;
@@ -38,7 +37,7 @@ out vec3 FragPos;
 
 void main(){
 gl_Position = proj * view * model * vec4(position, 1.0);
-Color = vec3(1.0, 1.0, 1.0);
+Color = color;
 TexCoord = aTexCoord;
 // ####################################################################
 // LAB_9
@@ -322,7 +321,7 @@ int main() {
     int width, height, nrChannels;
     stbi_set_flip_vertically_on_load(true); // tell stb_image.h to flip loaded texture's on the y-axis
 
-    unsigned char* data = stbi_load("paint.jpg", &width, &height, &nrChannels, 0);
+    unsigned char* data = stbi_load("wood.jpg", &width, &height, &nrChannels, 0);
 
     glBindTexture(GL_TEXTURE_2D, texture1);
 
@@ -380,7 +379,7 @@ int main() {
     // Specifikacja formatu danych wierzchołkowych
     GLint posAttrib = glGetAttribLocation(shaderProgram, "position");
     glEnableVertexAttribArray(posAttrib);
-    glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 0 * sizeof(GLfloat), 0); // 5 - > 6 - > 8 i 2 - > 3
+    glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), 0); // 5 - > 6 - > 8 i 2 - > 3
     GLint colAttrib = glGetAttribLocation(shaderProgram, "color");
     glEnableVertexAttribArray(colAttrib);
     glVertexAttribPointer(colAttrib, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), (void*)(3 * sizeof(GLfloat))); // 5 - > 6 - > 8 

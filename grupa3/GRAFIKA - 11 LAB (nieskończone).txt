@@ -1,4 +1,4 @@
-﻿// Nagłówki
+// Nagłówki
 //#include "stdafx.h"
 
 
